@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
-	"net/http"
+
+	// "net/http"
 
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
@@ -22,7 +24,7 @@ func main() {
 			Driver: "default",
 			Config: []dc.IPAMConfig{
 				{
-					Subnet: "192.168.10.0/20",
+					Subnet: "192.168.10.0/24",
 				},
 			},
 		}
@@ -52,14 +54,38 @@ func main() {
 
 	fmt.Println(res.GetIPInNetwork(net))
 
-	if err = pool.Retry(func() error {
+	res2, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Name:       "cli",
+		Repository: "busybox",
+		Networks: []*dockertest.Network{
+			net,
+		},
+	})
 
+	if err != nil {
+		log.Fatalf("Could not start 2nd resource %s", err)
+	}
+	fmt.Println(res2.GetIPInNetwork(net))
+
+	if err = pool.Retry(func() error {
+		var stdout bytes.Buffer
+		exitCode, err := res2.Exec(
+			[]string{
+				"time", "ping", "-w2", res.GetIPInNetwork(net),
+			},
+			dockertest.ExecOptions{
+				TTY:    true,
+				StdOut: &stdout,
+			},
+		)
+		fmt.Println("Exit code ", exitCode)
+		fmt.Println("Stdout ", stdout.String())
 		// if we have res.GetIPinNetwork -> it's not connecting...
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/health", res.GetPort("26657/tcp")))
-		if err != nil {
-			return err
-		}
-		fmt.Println(resp)
+		// resp, err := http.Get(fmt.Sprintf("http://%s:%s/health", res.GetIPInNetwork(net), res.GetPort("26657/tcp")))
+		// if err != nil {
+		// 	return err
+		// }
+		// fmt.Println(resp)
 		return err
 	}); err != nil {
 		log.Fatalf("Could not connect to docker: %s", err)
