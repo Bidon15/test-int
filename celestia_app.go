@@ -36,15 +36,13 @@ func main() {
 	defer net.Close()
 
 	ds := &dockertest.RunOptions{
-		Name: "celestia-app",
-		Networks: []*dockertest.Network{
-			net,
-		},
+		Name:         "celestia-app",
+		NetworkID:    "localnet",
 		Cmd:          []string{"--port", "26657"},
 		ExposedPorts: []string{"26657"},
 	}
 
-	res, err := pool.BuildAndRunWithOptions("/Users/bidon4/go/src/github.com/celestiaorg/test-int/celestia-app/Dockerfile", ds)
+	res, err := pool.BuildAndRunWithOptions("/tmp/test-int/celestia-app/Dockerfile", ds)
 
 	// res, err := pool.BuildAndRun("celestia-app0", "/Users/bidon4/go/src/github.com/celestiaorg/test-int/celestia-app/Dockerfile", []string{
 	// "--port", "1317:1317", "--port", "26656:26656", "--port", "26657:26657", "--port", "9090:9090"})
@@ -57,9 +55,8 @@ func main() {
 	res2, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Name:       "cli",
 		Repository: "busybox",
-		Networks: []*dockertest.Network{
-			net,
-		},
+		NetworkID:  "localnet",
+		Tty:        true,
 	})
 
 	if err != nil {
@@ -74,7 +71,7 @@ func main() {
 				"time", "ping", "-w2", res.GetIPInNetwork(net),
 			},
 			dockertest.ExecOptions{
-				TTY:    true,
+				//		TTY:    true,
 				StdOut: &stdout,
 			},
 		)
