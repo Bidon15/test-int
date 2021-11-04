@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 
@@ -68,7 +69,8 @@ func main() {
 		var stdout bytes.Buffer
 		exitCode, err := res2.Exec(
 			[]string{
-				"time", "ping", "-w2", res.GetIPInNetwork(net),
+				//"time", "ping", "-w2", res.GetIPInNetwork(net),
+				"wget", "-O", "-", res.GetIPInNetwork(net) + ":26657",
 			},
 			dockertest.ExecOptions{
 				//		TTY:    true,
@@ -83,6 +85,12 @@ func main() {
 		// 	return err
 		// }
 		// fmt.Println(resp)
+		if exitCode != 0 && err == nil {
+			fmt.Println("lol what?!")
+		}
+		if exitCode != 0 {
+			err = errors.New("command failed")
+		}
 		return err
 	}); err != nil {
 		log.Fatalf("Could not connect to docker: %s", err)
