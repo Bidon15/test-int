@@ -1,0 +1,37 @@
+version: '3'
+
+services:
+  app0:
+    container_name: app0
+    build: "./celestia-app"
+    ports:
+      - "26656-26657:26656-26657"
+    networks:
+      localnet:
+        ipv4_address: 192.168.10.2
+  
+  app1:
+    container_name: app1
+    build: "./celestia-app"
+    ports:
+      - "26659-26660:26656-26657"
+    networks:
+      localnet:
+        ipv4_address: 192.168.10.4
+  busybox:
+    container_name: busybox
+    build: "./alpine"
+    ports:
+      - "26662-26663:26656-26657"
+    networks:
+      localnet:
+        ipv4_address: 192.168.10.3
+
+networks:
+  localnet:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      -
+        subnet: 192.168.10.0/24

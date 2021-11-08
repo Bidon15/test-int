@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
-
-	// "net/http"
+	"net/http"
+	"strings"
 
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
@@ -36,62 +36,127 @@ func main() {
 	}
 	defer net.Close()
 
-	ds := &dockertest.RunOptions{
-		Name:         "celestia-app",
-		NetworkID:    "localnet",
-		Cmd:          []string{"--port", "26657"},
-		ExposedPorts: []string{"26657"},
+	node0 := &dockertest.RunOptions{
+		Name:      "node0",
+		NetworkID: net.Network.ID,
+		PortBindings: map[dc.Port][]dc.PortBinding{
+			"26656/tcp": {{HostIP: "", HostPort: "26656"}},
+			"26657/tcp": {{HostIP: "", HostPort: "26667"}},
+		},
 	}
 
-	res, err := pool.BuildAndRunWithOptions("/tmp/test-int/celestia-app/Dockerfile", ds)
+	node1 := &dockertest.RunOptions{
+		Name:      "node1",
+		NetworkID: net.Network.ID,
+		PortBindings: map[dc.Port][]dc.PortBinding{
+			"26656/tcp": {{HostIP: "", HostPort: "26659"}},
+			"26657/tcp": {{HostIP: "", HostPort: "26660"}},
+		},
+	}
 
-	// res, err := pool.BuildAndRun("celestia-app0", "/Users/bidon4/go/src/github.com/celestiaorg/test-int/celestia-app/Dockerfile", []string{
-	// "--port", "1317:1317", "--port", "26656:26656", "--port", "26657:26657", "--port", "9090:9090"})
+	res, err := pool.BuildAndRunWithOptions("/home/nnv/go/src/github.com/celestiaorg/test-int/celestia-app/Dockerfile", node0)
+
 	if err != nil {
 		log.Fatalf("Could not start resource %s", err)
 	}
 
-	fmt.Println(res.GetIPInNetwork(net))
+	fmt.Println("First Resource IP", res.GetIPInNetwork(net))
 
-	res2, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Name:       "cli",
-		Repository: "busybox",
-		NetworkID:  "localnet",
-		Tty:        true,
+	busybox, err := pool.BuildAndRunWithOptions("/home/nnv/go/src/github.com/celestiaorg/test-int/alpine/Dockerfile", &dockertest.RunOptions{
+		Name:      "cli",
+		NetworkID: net.Network.ID,
+		Tty:       true,
 	})
 
 	if err != nil {
 		log.Fatalf("Could not start 2nd resource %s", err)
 	}
-	fmt.Println(res2.GetIPInNetwork(net))
+	fmt.Println("2nd Resource IP ", busybox.GetIPInNetwork(net))
 
+	res3, err := pool.BuildAndRunWithOptions("/home/nnv/go/src/github.com/celestiaorg/test-int/celestia-app/Dockerfile", node1)
+
+	if err != nil {
+		log.Fatalf("Could not start resource %s", err)
+	}
+
+	fmt.Println("First Resource IP", res3.GetIPInNetwork(net))
+
+	// curling node0 using busybox
 	if err = pool.Retry(func() error {
 		var stdout bytes.Buffer
-		exitCode, err := res2.Exec(
+		var stderr bytes.Buffer
+		// notice that inside the same network, containers need to reach to the exported ports defined internally(like 26657), 
+		// rather then defined for host's (e.g. res.GetPort("26657/tcp") == 26660). Still a question mark but works, so ok with that
+		url0 := res.GetIPInNetwork(net) + ":" + "26657"
+		fmt.Println(url0)
+		exitCode, err := busybox.Exec(
 			[]string{
-				//"time", "ping", "-w2", res.GetIPInNetwork(net),
-				"wget", "-O", "-", res.GetIPInNetwork(net) + ":26657",
+				"curl", url0,
+				// Uncomment to play around with ping, wget, etc.
+				// "time","ping","-w2", url,
+				// "wget", "-O", "-", res.GetIPInNetwork(net) + ":26657",
 			},
 			dockertest.ExecOptions{
-				//		TTY:    true,
 				StdOut: &stdout,
+				StdErr: &stderr,
 			},
 		)
+
 		fmt.Println("Exit code ", exitCode)
-		fmt.Println("Stdout ", stdout.String())
-		// if we have res.GetIPinNetwork -> it's not connecting...
-		// resp, err := http.Get(fmt.Sprintf("http://%s:%s/health", res.GetIPInNetwork(net), res.GetPort("26657/tcp")))
-		// if err != nil {
-		// 	return err
-		// }
-		// fmt.Println(resp)
-		if exitCode != 0 && err == nil {
-			fmt.Println("lol what?!")
-		}
+		fmt.Println("Stdout ", strings.TrimRight(stdout.String(), "\n"))
+		fmt.Println("Stderr ", strings.TrimRight(stderr.String(), "\n"))
+		// retry method stops re-executing if one of 2 points are met:
+		// 1. err is equal to nil
+		// 2. timeout is reached (defined internally in dockertest libs)
 		if exitCode != 0 {
-			err = errors.New("command failed")
+			err = errors.New("Command failed. Retrying until deadline time")
 		}
+
 		return err
+
+	}); err != nil {
+		log.Fatalf("Could not connect to docker: %s", err)
+	}
+
+	// curling node1 using busybox
+	if err = pool.Retry(func() error {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		url1 := res3.GetIPInNetwork(net) + ":" + "26657"
+		exitCode, err := busybox.Exec(
+			[]string{
+				"curl", url1,
+			},
+			dockertest.ExecOptions{
+				StdOut: &stdout,
+				StdErr: &stderr,
+			},
+		)
+
+		fmt.Println("Exit code ", exitCode)
+		fmt.Println("Stdout ", strings.TrimRight(stdout.String(), "\n"))
+		fmt.Println("Stderr ", strings.TrimRight(stderr.String(), "\n"))
+		if exitCode != 0 {
+			err = errors.New("Command failed. Retrying until deadline time")
+		}
+
+		return err
+
+	}); err != nil {
+		log.Fatalf("Could not connect to docker: %s", err)
+	}
+
+	// testing how http.get request should work (no busybox here)
+	if err = pool.Retry(func() error {
+		url1 := res3.GetIPInNetwork(net) + ":" + "26657"
+		resp, err := http.Get(fmt.Sprintf("http://%s/health", url1))
+		if err != nil {
+			return err
+		}
+		fmt.Println(resp)
+
+		return err
+
 	}); err != nil {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
