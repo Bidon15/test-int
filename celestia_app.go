@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 
+	"github.com/celestiaorg/test-int/helper"
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
 )
@@ -54,7 +54,7 @@ func main() {
 		},
 	}
 
-	res, err := pool.BuildAndRunWithOptions("/home/nnv/go/src/github.com/celestiaorg/test-int/celestia-app/Dockerfile", node0)
+	res, err := pool.BuildAndRunWithOptions("/Users/bidon4/go/src/github.com/celestiaorg/test-int/celestia-app/Dockerfile", node0)
 
 	if err != nil {
 		log.Fatalf("Could not start resource %s", err)
@@ -62,7 +62,7 @@ func main() {
 
 	fmt.Println("First Resource IP", res.GetIPInNetwork(net))
 
-	busybox, err := pool.BuildAndRunWithOptions("/home/nnv/go/src/github.com/celestiaorg/test-int/alpine/Dockerfile", &dockertest.RunOptions{
+	busybox, err := pool.BuildAndRunWithOptions("/Users/bidon4/go/src/github.com/celestiaorg/test-int/alpine/Dockerfile", &dockertest.RunOptions{
 		Name:      "cli",
 		NetworkID: net.Network.ID,
 		Tty:       true,
@@ -73,7 +73,7 @@ func main() {
 	}
 	fmt.Println("2nd Resource IP ", busybox.GetIPInNetwork(net))
 
-	res3, err := pool.BuildAndRunWithOptions("/home/nnv/go/src/github.com/celestiaorg/test-int/celestia-app/Dockerfile", node1)
+	res3, err := pool.BuildAndRunWithOptions("/Users/bidon4/go/src/github.com/celestiaorg/test-int/celestia-app/Dockerfile", node1)
 
 	if err != nil {
 		log.Fatalf("Could not start resource %s", err)
@@ -83,9 +83,10 @@ func main() {
 
 	// curling node0 using busybox
 	if err = pool.Retry(func() error {
+
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
-		// notice that inside the same network, containers need to reach to the exported ports defined internally(like 26657), 
+		// notice that inside the same network, containers need to reach to the exported ports defined internally(like 26657),
 		// rather then defined for host's (e.g. res.GetPort("26657/tcp") == 26660). Still a question mark but works, so ok with that
 		url0 := res.GetIPInNetwork(net) + ":" + "26657"
 		fmt.Println(url0)
@@ -109,11 +110,18 @@ func main() {
 		// 1. err is equal to nil
 		// 2. timeout is reached (defined internally in dockertest libs)
 		if exitCode != 0 {
-			err = errors.New("Command failed. Retrying until deadline time")
+			err = errors.New("command failed. Retrying until deadline time")
 		}
 
 		return err
 
+	}); err != nil {
+		log.Fatalf("Could not connect to docker: %s", err)
+	}
+
+	if err = pool.Retry(func() error {
+		err := helper.RemoveFile(res3, "/root/.celestia-app/config/config.toml")
+		return err
 	}); err != nil {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
@@ -137,7 +145,7 @@ func main() {
 		fmt.Println("Stdout ", strings.TrimRight(stdout.String(), "\n"))
 		fmt.Println("Stderr ", strings.TrimRight(stderr.String(), "\n"))
 		if exitCode != 0 {
-			err = errors.New("Command failed. Retrying until deadline time")
+			err = errors.New("command failed. Retrying until deadline time")
 		}
 
 		return err
@@ -147,22 +155,22 @@ func main() {
 	}
 
 	// testing how http.get request should work (no busybox here)
-	if err = pool.Retry(func() error {
-		url1 := res3.GetIPInNetwork(net) + ":" + "26657"
-		resp, err := http.Get(fmt.Sprintf("http://%s/health", url1))
-		if err != nil {
-			return err
-		}
-		fmt.Println(resp)
+	// if err = pool.Retry(func() error {
+	// 	url1 := res3.GetIPInNetwork(net) + ":" + "26657"
+	// 	resp, err := http.Get(fmt.Sprintf("http://%s/health", url1))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	fmt.Println(resp)
 
-		return err
+	// 	return err
 
-	}); err != nil {
-		log.Fatalf("Could not connect to docker: %s", err)
-	}
+	// }); err != nil {
+	// 	log.Fatalf("Could not connect to docker: %s", err)
+	// }
 
-	// You can't defer this because os.Exit doesn't care for defer
-	if err := pool.Purge(res); err != nil {
-		log.Fatalf("Could not purge resource: %s", err)
-	}
+	// // You can't defer this because os.Exit doesn't care for defer
+	// if err := pool.Purge(res); err != nil {
+	// 	log.Fatalf("Could not purge resource: %s", err)
+	// }
 }

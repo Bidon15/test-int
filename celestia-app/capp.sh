@@ -7,18 +7,19 @@ capp=/usr/bin/celestia-appd
 # Display help and initialising later
 CHAIN_ID="test"
 KEY_TYPE="test"
-COINS_TYPE="10000000000stake,100000000000celes"
 
 $capp $text
-$capp init $CHAIN_ID --chain-id $CHAIN_ID
+$capp init $MONIKER --chain-id $CHAIN_ID
+
+ls -la /root/.celestia-app/config/
 
 # Creating the account  
-$capp keys add $NODE_NAME --keyring-backend=$KEY_TYPE
-node_addr=$($capp keys show $NODE_NAME -a --keyring-backend $KEY_TYPE)
+# $capp keys add $NODE_NAME --keyring-backend=$KEY_TYPE
+# node_addr=$($capp keys show $NODE_NAME -a --keyring-backend $KEY_TYPE)
 
-$capp add-genesis-account $node_addr $COINS_TYPE --keyring-backend $KEY_TYPE
-$capp gentx $NODE_NAME 5000000000stake --keyring-backend=$KEY_TYPE --chain-id $CHAIN_ID
-$capp collect-gentxs
+# $capp add-genesis-account $node_addr $COINS_TYPE --keyring-backend $KEY_TYPE
+# $capp gentx $NODE_NAME 5000000000stake --keyring-backend=$KEY_TYPE --chain-id $CHAIN_ID
+# $capp collect-gentxs
 
 # Set proper defaults and change ports
 sed -i 's#"tcp://127.0.0.1:26657"#"tcp://0.0.0.0:26657"#g' ~/.celestia-app/config/config.toml
@@ -29,4 +30,4 @@ sed -i 's/index_all_keys = false/index_all_keys = true/g' ~/.celestia-app/config
 sed -i '104 s/enable = false/enable = true/' ~/.celestia-app/config/app.toml
 sed -i '107 s/enable = false/enable = true/' ~/.celestia-app/config/app.toml
 
-$capp start
+# $capp start
